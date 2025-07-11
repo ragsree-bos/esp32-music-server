@@ -1,15 +1,14 @@
 {
   "name": "esp32-music-server",
   "version": "1.0.0",
-  "description": "Music streaming server for ESP32 AI Assistant",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "ytdl-core": "^4.11.3",
-    "fluent-ffmpeg": "^2.1.2"
+    "cors": "^2.8.5",
+    "ytdl-core": "^4.11.3"
   }
 }
+
