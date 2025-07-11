@@ -1,41 +1,51 @@
 const express = require('express');
 const cors = require('cors');
-const ytdlp = require('yt-dlp-wrap');
+const ytdl = require('ytdl-core');
+const ffmpeg = require('fluent-ffmpeg');
 const { exec } = require('child_process');
-const fs = require('fs');
+
 const app = express();
 app.use(cors());
 
 app.get('/music', async (req, res) => {
   const query = req.query.query;
-  if (!query) return res.status(400).send("Missing song name.");
+  if (!query) return res.status(400).send("No query provided");
 
-  const file = '/tmp/music.wav';
-  const output = '/tmp/audio.mp3';
+  const searchURL = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
 
-  // Clean any previous file
-  if (fs.existsSync(file)) fs.unlinkSync(file);
-  if (fs.existsSync(output)) fs.unlinkSync(output);
+  // Use yt-dlp via command line to get the URL
+  exec(`yt-dlp -f bestaudio -g "${searchURL}"`, (err, stdout, stderr) => {
+    if (err || !stdout) {
+      console.error("yt-dlp error:", stderr);
+      return res.status(500).send("Music fetch error");
+    }
 
-  const search = `ytsearch1:${query}`;
-  const ytdlpWrap = new ytdlp();
-  try {
-    await ytdlpWrap.exec([
-      search,
-      "-f", "bestaudio",
-      "-o", output
-    ]);
+    const streamURL = stdout.trim();
+    try {
+      const stream = ytdl(streamURL, { filter: 'audioonly' });
 
-    exec(`ffmpeg -y -i ${output} -ar 22050 -ac 1 ${file}`, (err) => {
-      if (err) return res.status(500).send("FFmpeg failed.");
-      res.set({ 'Content-Type': 'audio/wav' });
-      const stream = fs.createReadStream(file);
-      stream.pipe(res);
-    });
-  } catch (e) {
-    res.status(500).send("Failed to fetch song.");
-  }
+      res.set({
+        'Content-Type': 'audio/mpeg',
+        'Transfer-Encoding': 'chunked',
+        'Connection': 'keep-alive'
+      });
+
+      // Use ffmpeg to convert if needed (MP3)
+      ffmpeg(stream)
+        .format('mp3')
+        .audioBitrate(128)
+        .on('error', err => {
+          console.error("FFmpeg error:", err.message);
+          res.end();
+        })
+        .pipe(res, { end: true });
+
+    } catch (e) {
+      console.error("Playback error:", e);
+      res.status(500).send("Playback failed");
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Music server on ${PORT}`));
+app.listen(PORT, () => console.log(`🎵 Music server running on port ${PORT}`));
